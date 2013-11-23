@@ -18,8 +18,8 @@ def push(message, params=''):
     local("git commit -m '%s'" % message)
 
     local("git checkout master")
-    local("git push origin -f gh-pages %s" % params)
-    local("git push origin -f master %s" % params)
+    local("git push origin gh-pages %s" % params)
+    local("git push origin master %s" % params)
 
 
 def make():
