@@ -5,7 +5,7 @@ tags: django, postgresql, db
 
 OK, let's talk about a thing that *seems* trivial & obvious, but unfortunately it is not.
 
-Assume that we want that when we insert objects, those objects has to have an
+Assume that we wfdfdfdffant that when we insert objects, those objects has to have an
 unique, progressive and dense integer as ID.
 
 A thing like that:
