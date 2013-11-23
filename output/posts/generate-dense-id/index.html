@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Generate deterministic ID in a django 1.5 Model</title>
+  <link rel="stylesheet" href="/theme/css/main.css">
+  <link rel="stylesheet" href="/theme/css/dirittoalcittadino.css">
+      <link rel="shortcut icon" href="/theme/images/lawyers_fav.png" />
+
+  <!--[if IE]>
+  <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+</head>
+
+<body id="index" class="home">
+<div id="main-wrapper">
+  <header id="banner" class="body">
+    <div id="logo">
+      <a href="/"><img src="/theme/images/logo.png"></a>
+    </div>
+    <nav><ul>
+      <li><a href="/">Home page</a></li>
+                      <li ><a href="/pagine/chi-sono/">Chi Sono</a></li>
+                  <li ><a href="/pagine/divorzio-e-separazioni-iter-rapido/">Divorzio e Separazioni</a></li>
+                  <li ><a href="/pagine/domiciliazioni/">Domiciliazioni</a></li>
+                  <li ><a href="/pagine/iscrizione-albo-avvocati-stabiliti-in-spagna-con-relativa-iscrizione-in-italia/">Avvocatura in Spagna</a></li>
+                              <li><a href="/articoli/consulenze/">Consulenze</a></li>
+                  </ul></nav>
+  </header><!-- /#banner -->
+  <section id="content" class="body">
+    <section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="http://www.dirittoalcittadino.com/posts/generate-dense-id/" rel="bookmark"
+           title="Permalink to Generate deterministic ID in a django 1.5 Model">Generate deterministic ID in a django 1.5 Model</a></h1>
+          </header>
+
+    <div class="entry-content">
+      <footer class="post-info">
+        <abbr class="published" title="2013-09-29T00:00:00">
+                domenica 29 settembre 2013
+        </abbr>
+
+                <address class="vcard author">
+                Di <a class="url fn" href="/author/andrea-rabbaglietti.html">Andrea Rabbaglietti</a>
+        </address>
+        <p>In <a href="http://www.dirittoalcittadino.com/articoli/consulenze/">Consulenze</a>. </p>
+<p>tags: <a href="http://www.dirittoalcittadino.com/tags/django/">django</a><a href="http://www.dirittoalcittadino.com/tags/postgresql/">postgresql</a><a href="http://www.dirittoalcittadino.com/tags/db/">db</a></p>
+</footer><!-- /.post-info -->      <p>OK, let's talk about a thing that <em>seems</em> trivial &amp; obvious, but unfortunately it is not.</p>
+<p>Assume that we want that when we insert objects, those objects has to have an
+unique, progressive and dense integer as ID.</p>
+<p>A thing like that:</p>
+<div class="highlight"><pre><span class="cp"># models.py</span>
+<span class="n">from</span> <span class="n">django</span><span class="p">.</span><span class="n">db</span> <span class="n">import</span> <span class="n">models</span>
+
+<span class="n">class</span> <span class="n">Customer</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="n">Model</span><span class="p">)</span><span class="o">:</span>
+    <span class="p">[..]</span>
+
+<span class="n">c1</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span>
+<span class="n">c2</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span>
+<span class="n">c3</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span>
+
+<span class="n">c1</span><span class="p">.</span><span class="n">serial</span>
+<span class="o">&gt;</span> <span class="mi">1</span>
+<span class="n">c2</span><span class="p">.</span><span class="n">serial</span>
+<span class="o">&gt;</span> <span class="mi">2</span>
+<span class="n">c3</span><span class="p">.</span><span class="n">serial</span>
+<span class="o">&gt;</span> <span class="mi">3</span>
+</pre></div>
+
+
+<p>Well, someone (me too, though) would say that is there also a field that does this behaviour,
+in django core: <code>AutoField</code>, that is the type of the implicit <code>id</code> attribute,
+default primary key of any Model.</p>
+<p><em>Wrong.</em></p>
+<p>Turns out that <code>AutoField</code> doesn't do anything django-side but instead asks (at the saving time)
+at the DBMS for a generated ID or something as reported also <a href="http://grokbase.com/t/postgresql/pgsql-general/0877x998fr/creating-a-perfect-sequence-column">here</a>.
+The consequence is that what the DBMS may return isn't guaranteed <strong>at all</strong>
+densely progressive.</p>
+<p>That is a DBMS related thing that has to do with concurrence and perfomance
+avoiding gapless sequence.</p>
+<p><img alt="" src="/static/images/race-condition.jpg" title="Race condition" /></p>
+<p>Clearly when an object is saved is generated a race-conditions between
+the django "agents" (threads, different processes, different processes on different machines and so on) that possibly
+could want to save another object at the same time. Of course, django and so the DBMS
+has to manage that sort of thing and possibly in a perfomant manner.
+So instead of locking anything the DBMS prefers to skip some number that have the risks (timely-related risks)
+of a race-conditions</p>
+<div class="highlight"><pre><span class="n">c1</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span> <span class="err">#</span> <span class="n">t0</span> <span class="n">time</span>
+<span class="n">c2</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span> <span class="err">#</span> <span class="n">t1</span> <span class="n">time</span>
+<span class="n">c3</span> <span class="o">=</span> <span class="n">Customer</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">create</span><span class="p">()</span> <span class="err">#</span> <span class="n">t1</span><span class="err">`</span> <span class="n">time</span>
+
+<span class="n">c1</span><span class="p">.</span><span class="n">id</span>
+<span class="o">&gt;</span> <span class="mi">1</span>
+<span class="n">c2</span><span class="p">.</span><span class="n">id</span>
+<span class="o">&gt;</span> <span class="mi">3</span>
+<span class="n">c3</span><span class="p">.</span><span class="n">id</span>
+<span class="o">&gt;</span> <span class="mi">4</span>
+</pre></div>
+
+
+<p>Clearly also in that scenario it <strong>maybe</strong> could want to skip 2 as number and take 3 and 4.
+Don't fraintend me, this is a great choice of work, the world needs perfomances.</p>
+<blockquote>
+<p>But what if do you need a deterministic progressive id?</p>
+</blockquote>
+<p>So I've solved that issue using an auxiliary model 'Counter' which holds, locks and increments a row.</p>
+<div class="highlight"><pre><span class="cp"># models.py</span>
+<span class="n">from</span> <span class="n">django</span><span class="p">.</span><span class="n">db</span> <span class="n">import</span> <span class="n">models</span><span class="p">,</span> <span class="n">transaction</span>
+
+<span class="n">class</span> <span class="n">Counter</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="n">Model</span><span class="p">)</span><span class="o">:</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">models</span><span class="p">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="n">True</span><span class="p">,</span> <span class="n">db_index</span><span class="o">=</span><span class="n">True</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">models</span><span class="p">.</span><span class="n">PositiveIntegerField</span><span class="p">(</span><span class="k">default</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">class</span> <span class="n">Customer</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="n">Model</span><span class="p">)</span><span class="o">:</span>
+    <span class="n">def</span> <span class="n">save</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">:</span>
+        <span class="n">super</span><span class="p">(</span><span class="n">Customer</span><span class="p">,</span> <span class="n">self</span><span class="p">).</span><span class="n">save</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">cod</span> <span class="o">==</span> <span class="err">&#39;&#39;</span><span class="o">:</span>
+            <span class="n">with</span> <span class="n">transaction</span><span class="p">.</span><span class="n">commit_on_success</span><span class="p">()</span><span class="o">:</span>
+                <span class="nl">try:</span>
+                    <span class="n">counter</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">select_for_update</span><span class="p">().</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="err">&#39;</span><span class="n">Customer</span><span class="err">&#39;</span><span class="p">)</span>
+                <span class="n">except</span> <span class="n">Counter</span><span class="p">.</span><span class="n">DoesNotExist</span><span class="o">:</span>
+                    <span class="n">counter</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">.</span><span class="n">objects</span><span class="p">.</span><span class="n">select_for_update</span><span class="p">().</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="err">&#39;</span><span class="n">Customer</span><span class="err">&#39;</span><span class="p">)</span>
+                <span class="n">self</span><span class="p">.</span><span class="n">cod</span> <span class="o">=</span> <span class="s">&quot;CUST%d&quot;</span> <span class="o">%</span> <span class="n">counter</span><span class="p">.</span><span class="n">n</span>
+                <span class="n">counter</span><span class="p">.</span><span class="n">n</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">counter</span><span class="p">.</span><span class="n">save</span><span class="p">()</span>
+            <span class="n">super</span><span class="p">(</span><span class="n">Customer</span><span class="p">,</span> <span class="n">self</span><span class="p">).</span><span class="n">save</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+
+
+<p>note that <code>select_for_update()</code> is what locks the row (but pay attention on the DBMS used)
+until the transaction doesn't terminate.</p>
+<p>I think that the above is a good and simple way to achieve that sort of thing.</p>
+<p>Hope this helps</p>
+    </div><!-- /.entry-content -->
+        <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_identifier = "posts/generate-dense-id/";
+        var disqus_url = "http://www.dirittoalcittadino.com/posts/generate-dense-id/";
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://silverfix.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+    </div>
+    
+  </article>
+</section>
+    <a href="mailto:avv.rabbaglietti@gmail.com">
+      Per qualsiasi consulto o informazione non esitate a contattarmi.
+    </a>
+  </section>
+  <section id="extras" class="body">
+          </section><!-- /#extras -->
+
+  <footer id="footer">
+    <span style="color: #000000;">Studio Legale Alessio Rabbaglietti - Mobile 328/1350944 - Telefax 0881/331064 - C.so Roma 204/B, 71121 Foggia <br>
+    <a title="info@dirittoalcittadino.com" href="mailto:info@dirittoalcittadino.com">info@dirittoalcittadino.com</a></span>
+    <h5 id='tutela'>Ai sensi del D.Lgs. 196/2003, sulla tutela delle persone e di altri soggetti rispetto al trattamento dei dati personali, il trattamento delle informazioni che La riguardano, sarà improntato ai principi di <strong>correttezza</strong>, <strong>liceità</strong> e <strong>trasparenza</strong> e tutelando la Sua riservatezza e i Suoi diritti.</h5>
+  </footer>
+
+      <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-30293095-1']);
+    _gaq.push(['_trackPageview']);
+    (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+    </script>
+    <script type="text/javascript">
+    var disqus_shortname = 'silverfix';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'http://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</div>
+</body>
+</html>

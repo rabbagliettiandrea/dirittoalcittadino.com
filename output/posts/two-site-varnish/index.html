@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>One machine, two sites. How to handle caching with varnish just for one of them</title>
+  <link rel="stylesheet" href="/theme/css/main.css">
+  <link rel="stylesheet" href="/theme/css/dirittoalcittadino.css">
+      <link rel="shortcut icon" href="/theme/images/lawyers_fav.png" />
+
+  <!--[if IE]>
+  <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+</head>
+
+<body id="index" class="home">
+<div id="main-wrapper">
+  <header id="banner" class="body">
+    <div id="logo">
+      <a href="/"><img src="/theme/images/logo.png"></a>
+    </div>
+    <nav><ul>
+      <li><a href="/">Home page</a></li>
+                      <li ><a href="/pagine/chi-sono/">Chi Sono</a></li>
+                  <li ><a href="/pagine/divorzio-e-separazioni-iter-rapido/">Divorzio e Separazioni</a></li>
+                  <li ><a href="/pagine/domiciliazioni/">Domiciliazioni</a></li>
+                  <li ><a href="/pagine/iscrizione-albo-avvocati-stabiliti-in-spagna-con-relativa-iscrizione-in-italia/">Avvocatura in Spagna</a></li>
+                              <li><a href="/articoli/consulenze/">Consulenze</a></li>
+                  </ul></nav>
+  </header><!-- /#banner -->
+  <section id="content" class="body">
+    <section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="http://www.dirittoalcittadino.com/posts/two-site-varnish/" rel="bookmark"
+           title="Permalink to One machine, two sites. How to handle caching with varnish just for one of them">One machine, two sites. How to handle caching with varnish just for one of them</a></h1>
+          </header>
+
+    <div class="entry-content">
+      <footer class="post-info">
+        <abbr class="published" title="2013-10-06T00:00:00">
+                domenica 06 ottobre 2013
+        </abbr>
+
+                <address class="vcard author">
+                Di <a class="url fn" href="/author/andrea-rabbaglietti.html">Andrea Rabbaglietti</a>
+        </address>
+        <p>In <a href="http://www.dirittoalcittadino.com/articoli/consulenze/">Consulenze</a>. </p>
+<p>tags: <a href="http://www.dirittoalcittadino.com/tags/varnish/">varnish</a><a href="http://www.dirittoalcittadino.com/tags/nginx/">nginx</a></p>
+</footer><!-- /.post-info -->      <p>The scenario is the following:
+1x EC2 micro-instance that hosts 2 sites, 1 wordpress blog and 1 flask-powered site, say: wpsite.com &amp; flasksite.com.
+Both of them are served with nginx that listens on 8080, then varnish listening on 80 that
+acts as proxy for nginx.</p>
+<p><strong>What if we have to cache only wpsite.com skipping the cache engine for flasksite.com?</strong></p>
+<p>This an example of a VCL that we could use:</p>
+<div class="highlight"><pre><span class="n">backend</span> <span class="k">default</span> <span class="p">{</span>
+    <span class="p">.</span><span class="n">host</span> <span class="o">=</span> <span class="s">&quot;127.0.0.1&quot;</span><span class="p">;</span>
+    <span class="p">.</span><span class="n">port</span> <span class="o">=</span> <span class="s">&quot;8080&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">acl</span> <span class="n">purge</span> <span class="p">{</span>
+    <span class="s">&quot;127.0.0.1&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">sub</span> <span class="n">vcl_recv</span> <span class="p">{</span>
+   <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">host</span> <span class="o">~</span> <span class="s">&quot;^(www\.)?wpsite\.com$&quot;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span><span class="p">(</span><span class="n">pass</span><span class="p">);</span>
+   <span class="p">}</span>
+
+   <span class="n">remove</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">X</span><span class="o">-</span><span class="n">Forwarded</span><span class="o">-</span><span class="n">For</span><span class="p">;</span>
+   <span class="n">set</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">X</span><span class="o">-</span><span class="n">Forwarded</span><span class="o">-</span><span class="n">For</span> <span class="o">=</span> <span class="n">client</span><span class="p">.</span><span class="n">ip</span><span class="p">;</span>
+
+   <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">request</span> <span class="o">==</span> <span class="s">&quot;PURGE&quot;</span><span class="p">)</span> <span class="p">{</span>
+     <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">client</span><span class="p">.</span><span class="n">ip</span> <span class="o">~</span> <span class="n">purge</span><span class="p">)</span> <span class="p">{</span>
+       <span class="n">error</span> <span class="mi">405</span> <span class="s">&quot;Not allowed.&quot;</span><span class="p">;</span>
+     <span class="p">}</span>
+     <span class="k">return</span><span class="p">(</span><span class="n">lookup</span><span class="p">);</span>
+   <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span><span class="p">)</span> <span class="p">{</span>
+    <span class="err">#</span><span class="n">revisit</span> <span class="n">this</span> <span class="n">list</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;\.(gif|jpg|jpeg|swf|flv|mp3|mp4|pdf|ico|png|gz|tgz|bz2)(\?.*|)$&quot;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">remove</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span><span class="p">;</span>
+    <span class="p">}</span> <span class="n">elsif</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span> <span class="o">~</span> <span class="s">&quot;gzip&quot;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">set</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span> <span class="o">=</span> <span class="s">&quot;gzip&quot;</span><span class="p">;</span>
+    <span class="p">}</span> <span class="n">elsif</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span> <span class="o">~</span> <span class="s">&quot;deflate&quot;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">set</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span> <span class="o">=</span> <span class="s">&quot;deflate&quot;</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">remove</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">Accept</span><span class="o">-</span><span class="n">Encoding</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;\.(gif|jpg|jpeg|swf|css|js|flv|mp3|mp4|pdf|ico|png)(\?.*|)$&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">unset</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">cookie</span><span class="p">;</span>
+    <span class="n">set</span> <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">regsub</span><span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span><span class="p">,</span> <span class="s">&quot;\?.*$&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;\?(utm_(campaign|medium|source|term)|adParams|client|cx|eid|fbid|feed|ref(id|src)?|v(er|iew))=&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">set</span> <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">regsub</span><span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span><span class="p">,</span> <span class="s">&quot;\?.*$&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">cookie</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">cookie</span> <span class="o">~</span> <span class="s">&quot;(wordpress_|wp-settings-)&quot;</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">return</span><span class="p">(</span><span class="n">pass</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="n">unset</span> <span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">cookie</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">sub</span> <span class="n">vcl_fetch</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;manager&quot;</span> <span class="o">||</span> <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;wp-(login|admin)&quot;</span> <span class="o">||</span> <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;preview=true&quot;</span> <span class="o">||</span> <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;xmlrpc.php&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">hit_for_pass</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;manager&quot;</span> <span class="o">||</span>  <span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;(wp-(login|admin)|login)&quot;</span><span class="p">))</span> <span class="o">||</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">request</span> <span class="o">==</span> <span class="s">&quot;GET&quot;</span><span class="p">)</span> <span class="p">)</span> <span class="p">{</span>
+    <span class="n">unset</span> <span class="n">beresp</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">set</span><span class="o">-</span><span class="n">cookie</span><span class="p">;</span>
+   <span class="n">set</span> <span class="n">beresp</span><span class="p">.</span><span class="n">ttl</span> <span class="o">=</span> <span class="mi">1</span><span class="n">h</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">url</span> <span class="o">~</span> <span class="s">&quot;\.(gif|jpg|jpeg|swf|css|js|flv|mp3|mp4|pdf|ico|png)(\?.*|)$&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">set</span> <span class="n">beresp</span><span class="p">.</span><span class="n">ttl</span> <span class="o">=</span> <span class="mi">365</span><span class="n">d</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">sub</span> <span class="n">vcl_deliver</span> <span class="p">{</span>
+   <span class="k">if</span> <span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">hits</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+     <span class="n">set</span> <span class="n">resp</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">X</span><span class="o">-</span><span class="n">Cache</span> <span class="o">=</span> <span class="s">&quot;HIT&quot;</span><span class="p">;</span>
+   <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+     <span class="n">set</span> <span class="n">resp</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">X</span><span class="o">-</span><span class="n">Cache</span> <span class="o">=</span> <span class="s">&quot;MISS&quot;</span><span class="p">;</span>
+   <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">sub</span> <span class="n">vcl_hit</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">request</span> <span class="o">==</span> <span class="s">&quot;PURGE&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">set</span> <span class="n">obj</span><span class="p">.</span><span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span><span class="n">s</span><span class="p">;</span>
+    <span class="n">error</span> <span class="mi">200</span> <span class="s">&quot;OK&quot;</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">sub</span> <span class="n">vcl_miss</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">.</span><span class="n">request</span> <span class="o">==</span> <span class="s">&quot;PURGE&quot;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">error</span> <span class="mi">404</span> <span class="s">&quot;Not cached&quot;</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>The issue at this point is that all seems to work good but not any sort of
+cookie handlers of some sort (like a login-system cookie based).</p>
+<p>The key for the resolution of that issue is:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">req</span><span class="p">.</span><span class="n">http</span><span class="p">.</span><span class="n">host</span> <span class="o">~</span> <span class="s">&quot;^(www\.)?wpsite\.com$&quot;</span><span class="p">)</span> <span class="p">{</span>
+ <span class="k">return</span> <span class="p">(</span><span class="n">hit_for_pass</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>add the above in vcl_fetch to skip any caching-management for www.wpsite.com.</p>
+<p>For better understanding the machinery at the base of that thing follow this <a href="https://www.varnish-cache.org/trac/wiki/VCLExampleDefault">link</a> and
+take a look to the chart below, or drop me a line of comment.</p>
+<p><a href="https://www.varnish-cache.org/trac/attachment/wiki/VCLExampleDefault/varnish-flow.png"><img alt="" src="/static/images/varnish-flow.png" title="Varnish flow" /></a></p>
+<p>Cheers</p>
+    </div><!-- /.entry-content -->
+        <div class="comments">
+      <h2>Comments !</h2>
+      <div id="disqus_thread"></div>
+      <script type="text/javascript">
+        var disqus_identifier = "posts/two-site-varnish/";
+        var disqus_url = "http://www.dirittoalcittadino.com/posts/two-site-varnish/";
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://silverfix.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+      </script>
+    </div>
+    
+  </article>
+</section>
+    <a href="mailto:avv.rabbaglietti@gmail.com">
+      Per qualsiasi consulto o informazione non esitate a contattarmi.
+    </a>
+  </section>
+  <section id="extras" class="body">
+          </section><!-- /#extras -->
+
+  <footer id="footer">
+    <span style="color: #000000;">Studio Legale Alessio Rabbaglietti - Mobile 328/1350944 - Telefax 0881/331064 - C.so Roma 204/B, 71121 Foggia <br>
+    <a title="info@dirittoalcittadino.com" href="mailto:info@dirittoalcittadino.com">info@dirittoalcittadino.com</a></span>
+    <h5 id='tutela'>Ai sensi del D.Lgs. 196/2003, sulla tutela delle persone e di altri soggetti rispetto al trattamento dei dati personali, il trattamento delle informazioni che La riguardano, sarà improntato ai principi di <strong>correttezza</strong>, <strong>liceità</strong> e <strong>trasparenza</strong> e tutelando la Sua riservatezza e i Suoi diritti.</h5>
+  </footer>
+
+      <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-30293095-1']);
+    _gaq.push(['_trackPageview']);
+    (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+    </script>
+    <script type="text/javascript">
+    var disqus_shortname = 'silverfix';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'http://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</div>
+</body>
+</html>
