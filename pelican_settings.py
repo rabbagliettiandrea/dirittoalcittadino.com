@@ -2,7 +2,7 @@
 
 from __future__ import unicode_literals
 
-AUTHOR = 'Andrea Rabbaglietti'
+AUTHOR = 'Avv. Rabbaglietti'
 SITENAME = 'Diritto Al Cittadino'
 
 SITEURL = 'http://www.dirittoalcittadino.com'
@@ -34,7 +34,7 @@ TRANSLATION_FEED_ATOM = None
 # Uncomment following line if you want document-relative URLs when developing
 #RELATIVE_URLS = True
 
-DISQUS_SITENAME = 'silverfix'
+DISQUS_SITENAME = 'dirittoalcittadino'
 GOOGLE_ANALYTICS = 'UA-30293095-1'
 
 DEFAULT_DATE_FORMAT = '%A %d %B %Y'
