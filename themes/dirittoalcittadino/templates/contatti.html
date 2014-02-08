@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block content %}
+  <h1 class="entry-title">{{ page.title }}</h1>
+{#  {{ page.content }}#}
+
+  <h2 style="text-align: center; margin-top: 40px">Lo Studio Legale è e sarà <b>sempre dalla tua parte</b>.</h2>
+
+  <h2 style="line-height: 30px">
+    Telefonaci in qualsiasi momento al <span style="color: #2323CA;">328/1350944</span> per una consulenza,
+    un dubbio o un chiarimento.
+  </h2>
+
+  <img style="border: 1px solid rgb(102, 102, 102); width: 770px;" src="/theme/images/pen_1.jpg">
+
+  <h3>Oppure, se preferisci, compila il form di seguito:</h3>
+  <iframe src="https://docs.google.com/forms/d/1o83oN1qYh1LpweoVShIXbg4FUgGCpmSMfgYUVETgIvc/viewform?embedded=true" width="760" height="600" frameborder="0" marginheight="0" marginwidth="0">Caricamento in corso...</iframe>
+{% endblock %}
